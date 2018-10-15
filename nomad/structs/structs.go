@@ -2379,6 +2379,17 @@ func (id *DeviceIdTuple) Matches(other *DeviceIdTuple) bool {
 	return true
 }
 
+// Equals returns if this Device ID is the same as the passed ID.
+func (id *DeviceIdTuple) Equals(o *DeviceIdTuple) bool {
+	if id == nil && o == nil {
+		return true
+	} else if id == nil || o == nil {
+		return false
+	}
+
+	return o.Vendor == id.Vendor && o.Type == id.Type && o.Name == id.Name
+}
+
 // NodeDeviceResource captures a set of devices sharing a common
 // vendor/type/device_name tuple.
 type NodeDeviceResource struct {
@@ -2741,7 +2752,7 @@ func (a *AllocatedTaskResources) Add(delta *AllocatedTaskResources) {
 
 	for _, d := range delta.Devices {
 		// Find the matching device
-		idx := AllocatedDevices(delta.Devices).Index(d)
+		idx := AllocatedDevices(a.Devices).Index(d)
 		if idx == -1 {
 			a.Devices = append(a.Devices, d.Copy())
 		} else {
@@ -2861,7 +2872,7 @@ func (a AllocatedDevices) Index(d *AllocatedDeviceResource) int {
 	}
 
 	for i, o := range a {
-		if o.Vendor == d.Vendor && o.Type == d.Type && o.Name == d.Name {
+		if o.ID().Equals(d.ID()) {
 			return i
 		}
 	}
@@ -2879,6 +2890,18 @@ type AllocatedDeviceResource struct {
 
 	// DeviceIDs is the set of allocated devices
 	DeviceIDs []string
+}
+
+func (a *AllocatedDeviceResource) ID() *DeviceIdTuple {
+	if a == nil {
+		return nil
+	}
+
+	return &DeviceIdTuple{
+		Vendor: a.Vendor,
+		Type:   a.Type,
+		Name:   a.Name,
+	}
 }
 
 func (a *AllocatedDeviceResource) Add(delta *AllocatedDeviceResource) {
