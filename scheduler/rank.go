@@ -262,7 +262,7 @@ OUTER:
 		proposed = append(proposed, &structs.Allocation{AllocatedResources: total})
 
 		// Check if these allocations fit, if they do not, simply skip this node
-		fit, dim, util, _ := structs.AllocsFit(option.Node, proposed, netIdx)
+		fit, dim, util, _ := structs.AllocsFit(option.Node, proposed, netIdx, false)
 		netIdx.Release()
 		if !fit {
 			iter.ctx.Metrics().ExhaustedNode(option.Node, dim)
