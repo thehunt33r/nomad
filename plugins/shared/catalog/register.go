@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"github.com/hashicorp/nomad/drivers/java"
 	"github.com/hashicorp/nomad/drivers/qemu"
 	"github.com/hashicorp/nomad/drivers/rawexec"
 )
@@ -11,4 +12,5 @@ import (
 func init() {
 	RegisterDeferredConfig(rawexec.PluginID, rawexec.PluginConfig, rawexec.PluginLoader)
 	Register(qemu.PluginID, qemu.PluginConfig)
+	Register(java.PluginID, java.PluginConfig)
 }
