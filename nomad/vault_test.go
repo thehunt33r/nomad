@@ -1297,3 +1297,50 @@ func TestVaultClient_nextBackoff(t *testing.T) {
 		}
 	})
 }
+
+func TestVaultClient_tokenTTL(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name         string
+		creationTime int64
+		creationTTL  int
+		ttl          time.Duration
+	}{
+		{
+			"in future",
+			time.Now().Unix() - 1000,
+			2500,
+			1500 * time.Second,
+		},
+		{
+			"in past",
+			time.Now().Unix() - 2000,
+			1000,
+			-1000 * time.Second,
+		},
+	}
+
+	tolerance := 2 * time.Second
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			tokenData := &tokenData{
+				CreationTTL:  c.creationTTL,
+				CreationTime: int(c.creationTime),
+			}
+
+			found := tokenTTL(tokenData)
+			if !(c.ttl-tolerance <= found && found <= c.ttl+tolerance) {
+				t.Fatalf("wrong token ttl, expected=%s found=%s", c.ttl, found)
+			}
+		})
+	}
+
+	t.Run("nil case", func(t *testing.T) {
+		found := tokenTTL(nil)
+		if found != 0 {
+			t.Fatalf("expected 0 ttl but found=%s", found)
+		}
+	})
+}

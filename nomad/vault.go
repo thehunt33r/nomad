@@ -150,12 +150,13 @@ type PurgeVaultAccessorFn func(accessors []*structs.VaultAccessor) error
 // tokenData holds the relevant information about the Vault token passed to the
 // client.
 type tokenData struct {
-	CreationTTL int      `mapstructure:"creation_ttl"`
-	TTL         int      `mapstructure:"ttl"`
-	Renewable   bool     `mapstructure:"renewable"`
-	Policies    []string `mapstructure:"policies"`
-	Role        string   `mapstructure:"role"`
-	Root        bool
+	CreationTTL  int      `mapstructure:"creation_ttl"`
+	CreationTime int      `mapstructure:"creation_time"`
+	TTL          int      `mapstructure:"ttl"`
+	Renewable    bool     `mapstructure:"renewable"`
+	Policies     []string `mapstructure:"policies"`
+	Role         string   `mapstructure:"role"`
+	Root         bool
 }
 
 // vaultClient is the Servers implementation of the VaultClient interface. The
@@ -491,7 +492,9 @@ func (v *vaultClient) renewalLoop() {
 				break
 			}
 
+			metrics.IncrCounter([]string{"nomad", "vault", "renew_failed"}, 1)
 			v.logger.Warn("got error or bad auth, so backing off", "error", err)
+
 			backoff = nextBackoff(backoff, currentExpiration)
 			if backoff < 0 {
 				// We have failed to renew the token past its expiration. Stop
@@ -554,6 +557,9 @@ func nextBackoff(backoff float64, expiry time.Time) float64 {
 // renew attempts to renew our Vault token. If the renewal fails, an error is
 // returned. This method updates the lastRenewed time
 func (v *vaultClient) renew() error {
+	// Track how long the request takes
+	defer metrics.MeasureSince([]string{"nomad", "vault", "renew"}, time.Now())
+
 	// Attempt to renew the token
 	secret, err := v.auth.RenewSelf(v.tokenData.CreationTTL)
 	if err != nil {
@@ -648,6 +654,11 @@ func (v *vaultClient) parseSelfToken() error {
 		// All non-root tokens must be renewable
 		if !data.Renewable {
 			multierror.Append(&mErr, fmt.Errorf("Vault token is not renewable or root"))
+		}
+
+		// All non-root tokens must have creation time
+		if data.CreationTime == 0 {
+			multierror.Append(&mErr, fmt.Errorf("invalid lease creation time of zero"))
 		}
 
 		// All non-root tokens must have a lease duration
@@ -1228,8 +1239,18 @@ func (v *vaultClient) EmitStats(period time.Duration, stopCh chan struct{}) {
 		case <-time.After(period):
 			stats := v.Stats()
 			metrics.SetGauge([]string{"nomad", "vault", "distributed_tokens_revoking"}, float32(stats.TrackedForRevoke))
+			metrics.SetGauge([]string{"nomad", "vault", "token_ttl"}, float32(tokenTTL(v.tokenData)/time.Millisecond))
 		case <-stopCh:
 			return
 		}
 	}
+}
+
+func tokenTTL(tokenData *tokenData) time.Duration {
+	if tokenData == nil {
+		return time.Duration(0)
+	}
+
+	ttl := int64(tokenData.CreationTime+tokenData.CreationTTL) - time.Now().Unix()
+	return time.Duration(ttl) * time.Second
 }
